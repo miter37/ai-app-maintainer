@@ -12,3 +12,13 @@
 8. **구독 이용:** AI 분석·패치에 로컬 `codex` 또는 `claude` 명령을 이용한다. 앱 스킬 자체가 외부 유료 API를 직접 호출하지 않는다. 그러나 사용한 CLI가 API 키로 인증되었거나 구독 사용 한도를 초과했다면 비용/실행 제한은 각 제공자의 현재 설정에 달려 있다.
 9. **이력 관리:** 폴더에는 로그 발췌, 변경 전 소스 백업, 제안 및 분석 기록이 포함될 수 있다. 기본 `.gitignore`가 `managed-apps/*/`와 `reports/*`을 무시하더라도 직접 업로드하거나 강제 커밋하면 유출 위험이 있다.
 10. **외부 승인 채널 없음:** 스킬 폴더 내 JSON/Markdown으로 승인 대기 항목을 남긴다. 이메일·메신저·푸시 알림이나 상시 실행 대시보드는 없다. 예약 실행은 OS 스케줄러를 별도로 등록해야 한다.
+
+## MCP / always-on agent threat model
+
+- The local STDIO MCP server is a thin tool facade over the same CLI and JSON policies. It does not open a network port.
+- `run_maintenance` can edit source for eligible bug fixes when global/per-app `auto_fix=true`; enabling an MCP server is not synonymous with read-only access.
+- There is intentionally no MCP approval tool. Only the trusted **local operator CLI** can mark a proposal approved; a separate `apply_approved_change` tool checks that recorded approval before attempting to implement.
+- The MCP's registration and settings mutations are disabled by default. Config keys `mcp_allow_registration` and `mcp_allow_settings_changes` can be enabled only locally.
+- These are **application-level gates, not authentication or OS sandboxing**. A chatbot with host shell access can invoke the CLI or edit the JSON records, bypassing MCP-only gates. Secure the agent host, its messaging-channel authentication, file permissions, and shell tools separately.
+- No MCP elicitation, HTTP listener, cancellation protocol, session/user identity attestations, or built-in alert delivery is implemented.
+- More details: `references/MCP.md`.
