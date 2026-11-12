@@ -376,7 +376,9 @@ Bug reports, platform compatibility findings, security reviews, and improvements
 
 ### License
 
-**No license has been selected yet.** A public GitHub repository does not automatically grant permission to copy, modify, or redistribute its code. Add an explicit `LICENSE` before distributing this as open-source software or inviting code contributions.
+Licensed under the **MIT License**. See [LICENSE](LICENSE) for the full terms.
+
+Copyright (c) 2026 miter37.
 
 ---
 
