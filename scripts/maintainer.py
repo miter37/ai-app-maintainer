@@ -14,7 +14,7 @@ from core import (
     atomic_json, collect_logs, config, ensure_initialized, init_app_dirs, load_json,
     record, registry, validate_slug,
 )
-from workflow import decide, eligible_to_run, read_monitors, rid, run_one, suggest_one
+from workflow import apply_preapproved, decide, eligible_to_run, read_monitors, rid, run_one, suggest_one
 
 
 class Lock:
@@ -60,7 +60,7 @@ HELP_TOPICS = {
   Claude Code: /ai-app-maintainer help
   '유지보수스킬 어떻게 사용해?', '앱 폴더 등록은?', '업그레이드 제안은 어떻게 해?'
 
-[자세히] help 등록 | 점검 | 제안 | 승인 | 설정 | 집중관찰 | 일정 | 설치
+[자세히] help 등록 | 점검 | 제안 | 승인 | 설정 | 집중관찰 | 일정 | 설치 | mcp
 """,
     "등록": """앱 폴더 등록
   python scripts/maintainer.py add --app billing-api --path '/절대경로/앱' \
@@ -130,6 +130,18 @@ HELP_TOPICS = {
 - 스킬 자체는 백그라운드 서비스가 아니며 스케줄러 연결 전에는 자동 실행되지 않습니다.
 - 절대경로 실행법은 references/USAGE_KO.md 참조.
 """,
+    "mcp": """Hermes Agent / OpenClaw 등 상주봇용 MCP (로컬 STDIO, GUI 없음)
+  python scripts/mcp_server.py --check
+  python scripts/maintainer.py config --key mcp_allow_execution --value off
+  python scripts/maintainer.py config --key mcp_allow_registration --value on
+  python scripts/maintainer.py config --key mcp_allow_settings_changes --value on
+- 실행 중인 에이전트에 로컬 STDIO MCP 서버로 scripts/mcp_server.py를 등록합니다.
+- Hermes: ~/.hermes/config.yaml 의 mcp_servers 설정.
+- OpenClaw: openclaw mcp add ai-app-maintainer --command python3 --arg /절대경로/scripts/mcp_server.py
+- MCP에는 승인 생성 기능이 없습니다. 사람은 신뢰된 로컬 CLI에서 approve --no-apply.
+- auto_fix=true이면 MCP를 통한 유지보수 실행이 원본 버그를 수정할 수 있습니다.
+- 상주봇 cron과 서버 설치 및 보안 상세: references/MCP.md
+""",
     "설치": """Codex / Claude Code 스킬 설치
   python scripts/install.py --agent both --scope user
   python scripts/maintainer.py doctor
@@ -153,6 +165,7 @@ def show_help(topic_parts):
         "monitor": "집중관찰", "watch": "집중관찰", "관찰": "집중관찰", "집중관찰": "집중관찰",
         "schedule": "일정", "cron": "일정", "예약": "일정", "일정": "일정",
         "install": "설치", "설치": "설치",
+        "mcp": "mcp", "hermes": "mcp", "openclaw": "mcp", "상주봇": "mcp",
     }
     selected = aliases.get(topic, "overview")
     if topic and selected == "overview":
@@ -164,6 +177,8 @@ def show_help(topic_parts):
             selected = "승인"
         elif any(w in topic for w in ("관찰", "모니터")):
             selected = "집중관찰"
+        elif any(w in topic for w in ("mcp", "hermes", "openclaw", "상주봇")):
+            selected = "mcp"
         elif any(w in topic for w in ("설정", "스위치", "끄", "켜")):
             selected = "설정"
     print(HELP_TOPICS[selected].strip())
@@ -364,7 +379,7 @@ def doctor():
 def build_parser():
     p = argparse.ArgumentParser(description="Local AI app maintenance skill. Stores all state within this folder.")
     sub = p.add_subparsers(dest="command", required=True)
-    c = sub.add_parser("help", help="한국어 사용법 및 명령별 도움말 (help 등록/점검/제안/승인/설정/집중관찰/일정/설치)")
+    c = sub.add_parser("help", help="한국어 사용법 및 명령별 도움말 (help 등록/점검/제안/승인/설정/집중관찰/일정/설치/mcp)")
     c.add_argument("topic", nargs="*", help="질문 또는 주제")
     sub.add_parser("init", help="Initialize config, registry and history folders")
     sub.add_parser("doctor", help="Check basic CLI readiness; does not log into AI provider")
@@ -402,6 +417,9 @@ def build_parser():
     c.add_argument("--id", required=True)
     c.add_argument("--no-apply", action="store_true")
     c.add_argument("--allow-unverified", action="store_true", help="Explicitly accept no configured tests, for this approval only")
+    c = sub.add_parser("apply-approved", help="Apply an already human-approved proposal (never creates approval)")
+    c.add_argument("--app", required=True)
+    c.add_argument("--id", required=True)
     c = sub.add_parser("reject", help="Reject and remember a proposal")
     c.add_argument("--app", required=True)
     c.add_argument("--id", required=True)
@@ -453,6 +471,9 @@ def main(argv=None) -> int:
             with Lock():
                 render(decide(args.app, args.id, True, apply=not args.no_apply,
                               allow_unverified=args.allow_unverified))
+        elif args.command == "apply-approved":
+            with Lock():
+                render(apply_preapproved(args.app, args.id))
         elif args.command == "reject":
             with Lock():
                 render(decide(args.app, args.id, False))
