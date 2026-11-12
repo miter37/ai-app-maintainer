@@ -1,0 +1,21 @@
+{
+  "engine": "codex",
+  "lookback_hours": 24,
+  "run_every_hours": 24,
+  "auto_fix": true,
+  "upgrade_suggestions": true,
+  "monitor_days": 5,
+  "monitor_check_every_hours": 6,
+  "monitor_min_checks": 3,
+  "min_auto_confidence": 0.9,
+  "max_log_files": 40,
+  "max_bytes_per_log": 131072,
+  "max_total_log_bytes": 786432,
+  "agent_timeout_seconds": 900,
+  "test_timeout_seconds": 240,
+  "max_patch_files": 6,
+  "max_patch_bytes": 100000,
+  "max_patch_changed_lines": 300,
+  "require_tests_for_auto_fix": true,
+  "monitor_run_tests": true
+}

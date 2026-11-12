@@ -1,0 +1,7 @@
+# Local runtime data and potentially sensitive maintenance history
+managed-apps/*/
+reports/*
+*.lock
+__pycache__/
+.pytest_cache/
+.DS_Store
