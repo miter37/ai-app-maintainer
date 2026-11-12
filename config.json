@@ -17,5 +17,8 @@
   "max_patch_bytes": 100000,
   "max_patch_changed_lines": 300,
   "require_tests_for_auto_fix": true,
-  "monitor_run_tests": true
+  "monitor_run_tests": true,
+  "mcp_allow_execution": true,
+  "mcp_allow_registration": false,
+  "mcp_allow_settings_changes": false
 }
