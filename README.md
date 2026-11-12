@@ -2,13 +2,13 @@
 
 ### Your AI coding agent fixed the bug. Who makes sure it stays fixed?
 
-**ai-app-maintainer** is a local, skill-based maintenance workflow for **OpenAI Codex** and **Claude Code**. Register the applications you want it to look after, point it at their logs, and let your existing AI coding CLI help investigate recurring problems, prepare bounded fixes, and suggest improvements.
+**ai-app-maintainer** is a local, skill-based maintenance workflow for **OpenAI Codex** and **Claude Code**, now also exposing a **local MCP tool server for always-on agents such as Hermes Agent and OpenClaw**. Register the applications you want it to look after, point it at their logs, and let your existing AI coding CLI help investigate recurring problems, prepare bounded fixes, and suggest improvements.
 
 The important part: **maintenance does not end when a patch passes its tests.** Every successfully applied source fix starts a configurable, multi-day observation period with more frequent checks for regressions.
 
-**No web dashboard. No database server. No new agent platform.** Just a `SKILL.md`, Python standard-library scripts, JSON settings, and a separate maintenance history for every registered app.
+**No web dashboard. No database server. No new agent platform.** Just a `SKILL.md`, an optional STDIO MCP server, Python standard-library scripts, JSON settings, and a separate maintenance history for every registered app.
 
-> **Project status: early-stage.** The automated policy and file-handling paths have unit tests, but live, unattended use with every Codex/Claude Code version and every application stack has **not** been validated. Start with auto-fix disabled, review the evidence, and enable it selectively.
+> **Project status: early-stage.** The automated policy and file-handling paths and a local MCP wire-protocol roundtrip have tests, but live, unattended integration with every Hermes/OpenClaw, Codex/Claude Code version and application stack has **not** been validated. Start with auto-fix disabled, review the evidence, and enable it selectively.
 
 ## The idea in 30 seconds
 
@@ -61,7 +61,8 @@ The two paths are deliberately different: **a small, well-supported bug fix may 
 | **Post-fix watch** | For several days after a successful fix, checks for previous error markers and optionally reruns your safe smoke tests at a shorter interval. |
 | **Persistent per-app memory** | Records inspections, findings, proposals, approvals, fixes, backups, regression watches, and a chronological audit trail under the skill folder. |
 | **Multiple apps, one skill** | Each registered application has its own settings and history. Codex and Claude Code can share the same installed skill folder. |
-| **Headless by design** | Runs through CLI commands and your OS scheduler. No GUI, daemon, browser extension, hosted backend, or third-party Python packages. |
+| **Headless by design** | CLI and optional local STDIO MCP, plus an external scheduler. No GUI, web listener, hosted backend, or third-party Python packages. |
+| **MCP for persistent agents** | Hermes/OpenClaw can query status and history, run due maintenance, generate upgrade suggestions, and report approvals through 16 typed tools. No MCP tool can grant an approval. |
 
 This is **application source maintenance**, not an OS package updater. It does not run `apt upgrade`, update every installed program, or automatically deploy to production.
 
@@ -147,6 +148,87 @@ Turn it on for this app when you're comfortable with the boundaries:
 ```bash
 python3 scripts/maintainer.py set-app --app orders-api --key auto_fix --value on
 ```
+
+## Always-on agents: local MCP for Hermes Agent and OpenClaw
+
+The **same maintenance engine** is accessible three ways: the skill's natural-language instructions, the CLI, or a **headless MCP STDIO server**. No new agent platform, hosted API, listening port, or external Python package is required.
+
+**Check your MCP server:**
+
+```bash
+python3 scripts/mcp_server.py --check
+```
+
+**Hermes Agent:** add the following to `~/.hermes/config.yaml` (preserving other existing settings):
+
+```yaml
+mcp_servers:
+  ai-app-maintainer:
+    command: "python3"
+    args: ["/absolute/path/to/ai-app-maintainer/scripts/mcp_server.py"]
+```
+
+Then start a new Hermes session or run `/reload-mcp`. Hermes exposes the tools with an MCP server prefix. For an hourly check using Hermes's own scheduler:
+
+```bash
+hermes cron create "every 1h" \
+  "Use ai-app-maintainer MCP to run due-only maintenance and report regressions or pending human approvals with app/proposal IDs." \
+  --name "AI app maintenance"
+```
+
+**OpenClaw:** register and probe the STDIO server:
+
+```bash
+openclaw mcp add ai-app-maintainer \
+  --command python3 \
+  --arg /absolute/path/to/ai-app-maintainer/scripts/mcp_server.py
+
+openclaw mcp doctor ai-app-maintainer --probe
+```
+
+Then configure an hourly agent check (OpenClaw Gateway must be running):
+
+```bash
+openclaw cron add \
+  --name "AI app maintenance" \
+  --every 1h \
+  --session isolated \
+  --message "Use ai-app-maintainer MCP to run due-only maintenance, then report pending changes and regressions. Never approve a change on my behalf."
+```
+
+Those jobs use the agent's scheduler and messaging delivery. The **MCP server does not schedule jobs or send messages on its own.** Running due maintenance still launches the configured *local* Codex/Claude Code CLI when an analysis is needed; Hermes/OpenClaw's own chat model is not substituted for that code-editing engine.
+
+### Built-in approval boundary and MCP permissions
+
+MCP tools cover app discovery, recent log previews, maintenance history, pending proposals, multi-day fix watches, maintenance execution, feature suggestions, and explicitly preapproved patch application.
+
+**MCP does not expose `approve_change`.** A bot cannot approve a feature or uncertain fix through an MCP tool. An actual operator must first review its proposal and authorize the exact ID from a trusted local shell:
+
+```bash
+python3 scripts/maintainer.py pending --app orders-api
+python3 scripts/maintainer.py approve --app orders-api --id REAL_14_HEX_ID --no-apply
+```
+
+Afterwards the bot can use `apply_approved_change`, or the next due run can apply the approved change. Do not substitute the placeholder ID above for an actual proposal ID.
+
+All MCP permissions are ordinary booleans inside `config.json`:
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `mcp_allow_execution` | `true` | Expose maintenance execution and feature suggestion tools; **source auto-fix may occur** if `auto_fix=true`. |
+| `mcp_allow_registration` | `false` | Allow a bot to register new app roots and test commands only after local opt-in. |
+| `mcp_allow_settings_changes` | `false` | Allow changes to a limited set of app/global settings only after local opt-in. MCP cannot enable its own gates. |
+
+For an inspection-only rollout:
+
+```bash
+python3 scripts/maintainer.py config --key mcp_allow_execution --value off
+python3 scripts/maintainer.py config --key auto_fix --value off
+```
+
+**Security note for messaging bots:** MCP approval gating is a **tool interface policy**, not protection from an unrestricted shell/file tool. Restrict host access and messaging permissions separately. Only run the MCP server on a machine that should be allowed to see the registered source and logs.
+
+For all 16 tool names, Hermes/OpenClaw configuration options, unattended-operation caveats and approval examples, read **[MCP integration guide](references/MCP.md)**. Refer to the official [Hermes MCP](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp) and [OpenClaw MCP](https://docs.openclaw.ai/tools/mcp) docs for client-specific configuration.
 
 ## What happens after a fix?
 
@@ -246,7 +328,7 @@ Per-app overrides take precedence over global values. See the complete [settings
 
 ## Run it on a schedule
 
-There is **no always-on process**. Your operating system launches a short-lived maintenance run; the skill decides which apps are due. An hourly scheduler is sufficient for the default 24-hour and 6-hour cadences.
+There is **no always-on process inside the skill or MCP server**. Your operating system or Hermes/OpenClaw starts maintenance when scheduled; the engine decides which apps are due. An hourly scheduler is sufficient for the default 24-hour and 6-hour cadences.
 
 **Linux / macOS (cron):**
 
@@ -308,7 +390,7 @@ ai-app-maintainer/
 ├── SKILL.md                    # Agent instructions and approval policy
 ├── config.json                 # Global switches and intervals
 ├── registry.json               # Registered app paths + overrides
-├── scripts/                    # CLI, agent bridge, scheduling helpers
+├── scripts/                    # CLI, MCP stdio server, agent bridge, schedulers
 ├── references/                 # Policies and usage guides
 ├── managed-apps/
 │   └── orders-api/
@@ -344,7 +426,7 @@ If those checks do not pass, the change is not silently installed. Important and
 ## What this project does *not* do
 
 - **No auto-deploy, restart, database migration, or production traffic cutover.** `source_applied` means source files were changed and the configured verification passed (or a specific unverified approval waiver was given).
-- **No push notifications or hosted approval inbox.** Pending decisions are recorded locally; view them with `pending` and `report`.
+- **No built-in push notifications or hosted approval inbox.** Pending decisions are stored locally; Hermes/OpenClaw can report them using their own scheduled messaging jobs.
 - **No guarantee that every regression appears in logs.** Missing timestamps, truncated logs, quiet services, and incomplete tests limit what can be known.
 - **No guarantee of free AI usage.** Subscription entitlements, API-key configuration, rate limits, and billing belong to your chosen CLI/provider.
 - **No full end-to-end compatibility certification yet.** The CLI integration needs to be exercised with your installed Codex/Claude Code version and application environment.
@@ -357,7 +439,7 @@ The orchestration code uses the **Python standard library only**. Run the test s
 python3 -m unittest discover -s tests -v
 ```
 
-The current test suite covers 21 cases, including approval gates, feature-only suggestions, bounded auto-fix behavior, rollback, timestamp-aware log collection, shared skill installation, and regression monitoring. **These are local/unit-level checks, not a production reliability claim.**
+The current test suite covers 41 cases, including MCP STDIO roundtrips, tool argument validation, restrictive MCP defaults, approval boundaries, feature-only suggestions, bounded auto-fix behavior, rollback, timestamp-aware log collection, shared skill installation, and regression monitoring. **These are local/unit-level checks, not a production reliability claim.**
 
 Useful references:
 
@@ -365,6 +447,7 @@ Useful references:
 - [Full configuration and storage schema](references/SCHEMA.md)
 - [Security model and operational caveats](references/SECURITY.md)
 - [Korean usage guide](references/USAGE_KO.md)
+- [MCP setup for Hermes Agent / OpenClaw](references/MCP.md)
 - [Codex skills documentation](https://developers.openai.com/api/docs/guides/tools-skills)
 - [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference)
 

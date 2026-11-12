@@ -108,3 +108,11 @@ ai-app-maintainer/
 - `needs_review`: 재발 의심 상태가 기간 종료 시점에도 해결되지 않음
 
 정상 종료는 전체 기능의 무결성을 보장하지 않는다.
+
+## MCP host settings (config.json, no GUI)
+
+- `mcp_allow_execution` (`true` by default): allow MCP callers to run due/specific app maintenance, feature suggestion scans, and previously approved implementations. The normal `auto_fix` policy STILL applies; this is not read-only.
+- `mcp_allow_registration` (`false` by default): allow app registration through an MCP tool, including path, log globs, and test commands. Set locally only.
+- `mcp_allow_settings_changes` (`false` by default): allow a bounded set of global and per-app maintenance settings to be changed by MCP. The MCP cannot alter any of its own permission flags.
+
+Usage: `python3 scripts/maintainer.py config --key mcp_allow_execution --value off` (similarly for the other two toggles). `scripts/mcp_server.py` runs as a local STDIO MCP tool server with 16 tools. It shares the same `config.json`, `registry.json`, `managed-apps/`, and CLI lock. **No remote user identity or operator approvals are established by the MCP transport.** Full details: [`MCP.md`](MCP.md).

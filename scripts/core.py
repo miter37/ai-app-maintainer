@@ -38,6 +38,10 @@ DEFAULTS = {
     "max_patch_bytes": 100000,
     "max_patch_changed_lines": 300,
     "require_tests_for_auto_fix": True,
+    # MCP is a local tool interface, not an authorization channel.
+    "mcp_allow_execution": True,
+    "mcp_allow_registration": False,
+    "mcp_allow_settings_changes": False,
 }
 APP_DEFAULTS = {
     "enabled": True,
@@ -143,7 +147,8 @@ def config() -> dict[str, Any]:
     merged = {**DEFAULTS, **value}
     if merged["engine"] not in {"codex", "claude"}:
         raise ValueError("engine must be codex or claude")
-    for key in ("auto_fix", "upgrade_suggestions", "require_tests_for_auto_fix", "monitor_run_tests"):
+    for key in ("auto_fix", "upgrade_suggestions", "require_tests_for_auto_fix", "monitor_run_tests",
+                "mcp_allow_execution", "mcp_allow_registration", "mcp_allow_settings_changes"):
         if type(merged[key]) is not bool:
             raise ValueError(f"{key} must be true/false")
     for key in ("lookback_hours", "run_every_hours", "monitor_days", "monitor_check_every_hours", "agent_timeout_seconds", "test_timeout_seconds", "max_log_files", "max_bytes_per_log", "max_total_log_bytes", "max_patch_files", "max_patch_bytes", "max_patch_changed_lines", "monitor_min_checks"):

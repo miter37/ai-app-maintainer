@@ -164,3 +164,22 @@ python3 -m unittest discover -s tests -v
 ```
 
 CLI와 테스트는 Python 표준 라이브러리만 사용하지만 실제 AI 진단은 해당 CLI가 설치·인증되어 있고 실행 환경에서 정상 동작해야 합니다. 자동 수정은 소스 파일을 바꾸므로 중요한 앱은 백업 및 별도 테스트 환경에서 먼저 검증하세요. 로그 비식별화는 최선형이며 비밀값 완전 검출을 보장하지 않습니다. 자세한 내용은 `references/SECURITY.md` 참고.
+
+## 11. Hermes Agent·OpenClaw 상주봇에서 MCP로 사용하기
+
+기존 스킬·CLI에 더해 로컬 STDIO MCP 서버를 사용할 수 있습니다. 웹/GUI/데몬이나 추가 API 요금제를 만들지 않으며, Python 표준 라이브러리만 사용합니다.
+
+```bash
+python3 scripts/mcp_server.py --check
+python3 scripts/maintainer.py help mcp
+```
+
+- Hermes: `~/.hermes/config.yaml`의 `mcp_servers`에 `python3` + `scripts/mcp_server.py` 절대경로를 등록.
+- OpenClaw: `openclaw mcp add ai-app-maintainer --command python3 --arg /절대경로/scripts/mcp_server.py`
+- 상주봇의 cron에서 `run_maintenance`를 due-only로 정기 호출하면 기본 24시간 점검 및 수정 후 6시간 집중 관찰 간격을 적용할 수 있습니다.
+- 16개 MCP 도구가 상태조회·승인 대기·로그점검·유지보수·개선 제안·이미 승인된 패치 적용을 제공합니다.
+- **MCP에는 승인 생성 도구가 없습니다.** 중요 변경이나 메뉴/기능 개선은 운영자가 별도 로컬 쉘에서 `approve --app 앱ID --id 제안ID --no-apply`를 실행한 다음 봇으로 적용할 수 있습니다.
+- 기본 `mcp_allow_execution=true`, `mcp_allow_registration=false`, `mcp_allow_settings_changes=false`. `auto_fix=true` 상태에서 유지보수를 실행하면 일부 저위험 버그가 실제로 수정될 수 있으므로 주의하세요.
+- 메시지 봇에 호스트 셸/파일 권한이 열려 있다면 MCP 승인 제한만으로는 충분하지 않습니다. 운영체제와 봇의 권한 제한을 함께 적용해야 합니다.
+
+**상세 설정 및 보안, Hermes·OpenClaw cron 예제:** [`references/MCP.md`](MCP.md)

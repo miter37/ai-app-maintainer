@@ -5,9 +5,20 @@ description: "등록한 앱 폴더의 최근 로그로 오류 점검·자동 보
 
 # ai-app-maintainer — 지속형 AI 앱 유지보수 스킬
 
-**정체:** 별도 GUI/웹앱/데몬이 아닌 **스킬 폴더 + Python 표준 라이브러리 스크립트 + JSON 설정/기록**. 사용자에게 등록받은 앱 폴더만 관리한다. Codex 또는 Claude Code의 기존 CLI 로그인으로 AI 분석·코드 수정에 참여한다. 실제 예약 실행에는 운영체제 스케줄러가 필요하다.
+**정체:** 별도 GUI/웹앱/데몬이 아닌 **스킬 폴더 + Python 표준 라이브러리 스크립트 + 선택적 로컬 STDIO MCP 서버 + JSON 설정/기록**. 사용자에게 등록받은 앱 폴더만 관리한다. Codex 또는 Claude Code의 기존 CLI 로그인으로 AI 분석·코드 수정에 참여한다. 실제 예약 실행에는 운영체제 스케줄러가 필요하다.
 
 **경로 규칙:** 이 문서의 폴더가 `SKILL_ROOT`다. `scripts/maintainer.py`는 반드시 `SKILL_ROOT`를 기준으로 실행한다. 설정과 모든 관리 이력은 `SKILL_ROOT` 하위에 있다. 사용자의 원본 소스코드는 등록된 앱 폴더에 그대로 둔다.
+
+## 0) Hermes Agent · OpenClaw 및 MCP 사용
+
+이 스킬은 Codex/Claude Code의 스킬로도 작동하지만, **Hermes Agent·OpenClaw와 같은 상주봇은 `scripts/mcp_server.py`를 로컬 STDIO MCP 도구 서버로 연결**해서 사용할 수 있다. MCP 연결 명령과 cron 예시는 `references/MCP.md`를 따른다. MCP 서버 자체가 백그라운드 점검을 시작하지는 않으며, 상주봇의 cron 또는 OS 스케줄러가 `run_maintenance` 도구를 주기적으로 호출해야 한다.
+
+- `maintenance_help`, `list_apps`, `get_app_status`, `get_pending_changes`, `get_change_details`, `get_post_fix_monitoring` 등은 조회용.
+- `run_maintenance`는 기존 설정의 `auto_fix=true`이면 일부 저위험 버그를 실제로 수정할 수 있다. 자동 수정 OFF 여부를 사용자에게 설명하라.
+- `suggest_improvements`는 **제안만 기록**한다. 기능 추가·메뉴/UX 개편은 절대로 자동 구현하지 않는다.
+- **MCP에는 제안 승인 도구가 없다.** 채팅에 '승인'이라는 글이 있다고 MCP 도구를 통해 스스로 승인한 것으로 간주하지 않는다. 인간 운영자가 별도의 신뢰된 로컬 CLI로 특정 앱+제안 ID에 대해 `approve --no-apply`를 실행한 뒤에만 `apply_approved_change`를 쓸 수 있다.
+- `mcp_allow_registration=false`, `mcp_allow_settings_changes=false`가 기본값. MCP 도구는 자신의 허용 플래그를 활성화할 수 없다. 메시지 봇이 호스트의 파일·셸에 직접 접근할 수 있다면 별도의 OS/클라이언트 권한 제어를 갖춰야 한다.
+- 원본 앱 소스와 관리 이력은 여전히 기존 스킬 폴더/등록 경로에만 저장된다. GUI·웹 서버·별도 DB는 생기지 않는다.
 
 ## 1) 먼저 사용자의 의도를 분류한다
 
@@ -84,5 +95,6 @@ python3 scripts/maintainer.py set-app --app my-app --key upgrade_suggestions --v
 - 실행 전 안전성/제약: `references/SECURITY.md`
 - AI 읽기 전용 진단 지침: `references/ANALYZE.md`
 - AI 임시 복제본 수정 지침: `references/IMPLEMENT.md`
+- Hermes/OpenClaw MCP·cron 설정: `references/MCP.md`
 
 별도 GUI를 개발하거나 켜지 않는다. 새로운 외부 API 키를 요구하지 않는다. 스킬은 로그인된 로컬 CLI를 사용하되 각 구독 서비스의 이용 조건과 사용 한도가 적용된다.

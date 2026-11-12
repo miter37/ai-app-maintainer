@@ -465,15 +465,13 @@ def run_one(app_id: str, *, agent: bool = True) -> dict:
             if issue.get("status") != "approved":
                 continue
             try:
-                fixed = implement(app_id, issue, approved=True, allow_unverified=issue.get("allow_unverified", False))
-                issue["status"] = "applied"
-                issue["fix_id"] = fixed["id"]
-                atomic_json(p, issue)
-                actions.append(fixed)
+                applied = apply_preapproved(app_id, issue["id"])
+                if applied["status"] == "applied":
+                    actions.append(applied["fix"])
+                else:
+                    problems.append(f"Approved {issue['id']} could not be applied: {applied['reason']}")
             except Exception as e:
-                problems.append(f"Approved {issue['id']} could not be applied: {e}")
-                issue["last_error"] = str(e)[:700]
-                atomic_json(p, issue)
+                problems.append(f"Approved {issue['id']} failed approval check: {e}")
     if agent:
         try:
             data = safe_analysis(cfg["engine"], root, analysis_prompt(app_id, app, settings, evidence, read_monitors(app_id)),
@@ -572,6 +570,37 @@ def suggest_one(app_id: str) -> dict:
     record(app_id, "suggestions_checked", summary=f"Suggested {len(items)} candidate(s), all approval-gated", run_id=run_id)
     return {"app": app_id, "status": "reviewed", "suggestions": len(items), "items": items,
             "report": str(app_dir(app_id) / "latest-suggestions.md")}
+
+
+def apply_preapproved(app_id: str, proposal_id: str) -> dict:
+    """Apply only a proposal already marked approved by a separate operator CLI action.
+
+    This is deliberately distinct from decide(... approval=True). MCP MUST NOT
+    possess a path that can mark pending features, UX, or risky fixes approved.
+    The caller is expected to hold the shared maintainer lock.
+    """
+    if not re.fullmatch(r"[a-f0-9]{14}", proposal_id):
+        raise ValueError("Invalid proposal ID")
+    if app_id not in registry()["apps"]:
+        raise ValueError(f"Unknown app: {app_id}")
+    path = app_dir(app_id) / "proposals" / f"{proposal_id}.json"
+    issue = load_json(path)
+    if issue is None or issue.get("status") != "approved" or not issue.get("approved_at"):
+        raise ValueError("Proposal is not approved by operator CLI; cannot apply")
+    try:
+        result = implement(app_id, issue, approved=True,
+                           allow_unverified=issue.get("allow_unverified") is True)
+    except Exception as exc:
+        issue["last_error"] = str(exc)[:700]
+        atomic_json(path, issue)
+        record(app_id, "approved_apply_failed", summary=f"{proposal_id}: {str(exc)[:230]}")
+        return {"proposal_id": proposal_id, "status": "approved_but_not_applied",
+                "reason": str(exc)[:700]}
+    issue["status"] = "applied"
+    issue["fix_id"] = result["id"]
+    issue.pop("last_error", None)
+    atomic_json(path, issue)
+    return {"proposal_id": proposal_id, "status": "applied", "fix": result}
 
 
 def decide(app_id: str, proposal_id: str, approval: bool, *, apply: bool = True,
